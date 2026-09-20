@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DirectDrop - P2P File Share</title>
+    <title>DirectDrop - 画面共有 & ファイル共有</title>
     
     <!-- Tailwind CSS for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -15,17 +15,15 @@
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
 
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap');
         
         body {
             font-family: 'Inter', sans-serif;
             background-color: #0b1120; /* Tailwind slate-950 */
-            color: #f8fafc; /* Tailwind slate-50 */
+            color: #f8fafc;
         }
         
-        .font-mono {
-            font-family: 'JetBrains Mono', monospace;
-        }
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
 
         /* Custom Scrollbar */
         ::-webkit-scrollbar { width: 6px; }
@@ -42,182 +40,205 @@
         .app-screen.active { 
             display: flex; 
             opacity: 1; 
+            animation: fadeIn 0.4s ease-out forwards;
         }
 
-        /* Pulse animation for dropzone */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
         .drag-over {
-            border-color: #3b82f6 !important; /* blue-500 */
+            border-color: #3b82f6 !important;
             background-color: rgba(59, 130, 246, 0.1) !important;
+        }
+
+        #remote-video {
+            background-color: #000;
+            border-radius: 1rem;
+            max-height: 60vh;
+            object-fit: contain;
+            display: none; /* Hidden until stream starts */
+        }
+        #remote-video.active {
+            display: block;
         }
     </style>
 </head>
 <body class="min-h-screen flex flex-col relative overflow-x-hidden">
 
-    <!-- Background Elements -->
+    <!-- 背景エフェクト -->
     <div class="fixed top-0 left-0 w-full h-full overflow-hidden -z-10 pointer-events-none">
         <div class="absolute top-[-10%] left-[-10%] w-96 h-96 bg-blue-600/20 rounded-full blur-3xl"></div>
         <div class="absolute bottom-[-10%] right-[-10%] w-96 h-96 bg-purple-600/20 rounded-full blur-3xl"></div>
     </div>
 
-    <!-- Header -->
-    <header class="w-full p-6 flex items-center justify-between z-10 border-b border-slate-800/50 bg-slate-950/50 backdrop-blur-md">
+    <!-- ヘッダー -->
+    <header class="w-full p-4 sm:p-6 flex items-center justify-between z-10 border-b border-slate-800/50 bg-slate-950/80 backdrop-blur-md">
         <div class="flex items-center space-x-3">
             <div class="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20">
                 <i class="ph-bold ph-paper-plane-tilt text-white text-xl"></i>
             </div>
-            <h1 class="text-2xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400">DirectDrop</h1>
+            <h1 class="text-xl sm:text-2xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400">DirectDrop</h1>
         </div>
-        <div class="flex items-center space-x-2">
+        <div class="flex items-center space-x-4">
             <span id="connection-indicator" class="flex items-center text-xs font-medium px-3 py-1.5 rounded-full bg-slate-900 border border-slate-800 text-slate-400 transition-colors duration-300">
                 <span class="w-2 h-2 rounded-full bg-slate-500 mr-2 indicator-dot"></span>
                 <span class="indicator-text">未接続</span>
             </span>
+            <button id="btn-disconnect" onclick="disconnectPeer()" class="hidden px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-lg text-xs font-medium transition-all items-center space-x-1">
+                <i class="ph ph-power"></i> <span>切断</span>
+            </button>
         </div>
     </header>
 
-    <!-- Alert / Error Toast -->
+    <!-- トースト通知 -->
     <div id="alert-toast" class="fixed top-6 left-1/2 transform -translate-x-1/2 -translate-y-24 opacity-0 transition-all duration-300 z-50 flex items-center space-x-3 px-6 py-3 rounded-2xl shadow-2xl backdrop-blur-lg border font-medium text-sm">
         <i id="alert-icon" class="text-xl"></i>
         <span id="alert-message"></span>
     </div>
 
-    <!-- Main Content Area -->
-    <main class="flex-grow flex flex-col items-center justify-center p-4 w-full max-w-4xl mx-auto z-10 relative">
+    <!-- メインコンテンツ -->
+    <main class="flex-grow flex flex-col items-center justify-center p-4 w-full max-w-6xl mx-auto z-10 relative">
 
-        <!-- SCREEN 1: Loading / Initializing -->
+        <!-- 画面1: ロード中 -->
         <div id="screen-loading" class="app-screen active flex-col items-center text-center w-full max-w-md">
             <i class="ph ph-spinner-gap text-5xl text-blue-500 animate-spin mb-6"></i>
             <h2 class="text-xl font-bold mb-2">P2Pネットワークに接続中...</h2>
-            <p class="text-slate-400 text-sm">システムを初期化しています。少々お待ちください。</p>
+            <p class="text-slate-400 text-sm">初期化しています。少々お待ちください。</p>
         </div>
 
-        <!-- SCREEN 2: Connection Setup (Ready) -->
+        <!-- 画面2: 接続セットアップ -->
         <div id="screen-setup" class="app-screen flex-col w-full max-w-lg">
-            <div class="text-center mb-10">
-                <h2 class="text-3xl font-bold mb-3">安全で無制限の直接通信</h2>
-                <p class="text-slate-400">サーバーを経由しないため、最高画質・容量無制限で瞬時にファイルを受け渡しできます。</p>
+            <div class="text-center mb-8">
+                <h2 class="text-2xl font-bold mb-2">安全なP2P通信</h2>
+                <p class="text-slate-400 text-sm">サーバーを経由しない直接通信。画質劣化なしのファイル転送と画面共有が可能です。</p>
             </div>
 
-            <div class="bg-slate-900/80 backdrop-blur-sm p-8 rounded-3xl border border-slate-800 shadow-xl space-y-8">
-                
-                <!-- My ID Section -->
+            <div class="bg-slate-900/80 backdrop-blur-sm p-6 rounded-3xl border border-slate-800 shadow-xl space-y-6">
+                <!-- 自分のID -->
                 <div>
-                    <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 ml-1">あなたの接続ID</label>
+                    <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 ml-1">あなたの接続ID</label>
                     <div class="flex items-center relative group">
-                        <input type="text" id="my-peer-id" readonly class="w-full bg-slate-950 border border-slate-700 text-white rounded-xl py-4 pl-4 pr-12 font-mono text-lg text-center tracking-wider focus:outline-none focus:border-blue-500 transition-colors cursor-pointer" onclick="copyMyId()">
-                        <button onclick="copyMyId()" class="absolute right-3 p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors group-hover:text-blue-400" title="IDをコピー">
-                            <i class="ph ph-copy text-xl"></i>
+                        <input type="text" id="my-peer-id" readonly class="w-full bg-slate-950 border border-slate-700 text-white rounded-xl py-3 pl-4 pr-12 font-mono text-center focus:outline-none focus:border-blue-500 cursor-pointer" onclick="copyMyId()">
+                        <button onclick="copyMyId()" class="absolute right-2 p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors group-hover:text-blue-400">
+                            <i class="ph ph-copy text-lg"></i>
                         </button>
                     </div>
-                    <p class="text-xs text-slate-500 mt-2 ml-1">このIDをファイルを送りたい相手に伝えてください。</p>
                 </div>
 
                 <div class="flex items-center justify-center space-x-4">
                     <div class="h-px bg-slate-800 flex-grow"></div>
-                    <span class="text-xs font-bold text-slate-500 uppercase">または</span>
+                    <span class="text-xs font-bold text-slate-500 uppercase">接続する</span>
                     <div class="h-px bg-slate-800 flex-grow"></div>
                 </div>
 
-                <!-- Connect Section -->
+                <!-- 相手のID入力 -->
                 <div>
-                    <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 ml-1">相手のIDを入力して接続</label>
-                    <div class="flex space-x-3">
-                        <input type="text" id="target-id" placeholder="相手のIDをペースト" class="flex-grow bg-slate-950 border border-slate-700 text-white rounded-xl px-4 py-3 font-mono focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all placeholder:font-sans placeholder:text-slate-600">
-                        <button onclick="connectToPeer()" id="btn-connect" class="bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white font-semibold px-6 py-3 rounded-xl transition-all shadow-lg shadow-blue-500/20 active:scale-95 flex items-center space-x-2 whitespace-nowrap">
-                            <i class="ph ph-link text-lg"></i>
-                            <span>接続</span>
+                    <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 ml-1">相手のIDを入力</label>
+                    <div class="flex space-x-2">
+                        <input type="text" id="target-id" placeholder="相手のIDをペースト" class="flex-grow bg-slate-950 border border-slate-700 text-white rounded-xl px-4 py-3 font-mono focus:outline-none focus:border-purple-500 placeholder:font-sans placeholder:text-slate-600">
+                        <button onclick="connectToPeer()" id="btn-connect" class="bg-blue-600 hover:bg-blue-500 text-white font-semibold px-5 py-3 rounded-xl transition-all shadow-lg active:scale-95 flex items-center space-x-2 whitespace-nowrap">
+                            <i class="ph ph-link text-lg"></i> <span>接続</span>
                         </button>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- SCREEN 3: File Transfer Interface -->
-        <div id="screen-transfer" class="app-screen flex-col w-full max-w-3xl">
-            <!-- Connection Status Bar -->
-            <div class="flex flex-col sm:flex-row items-center justify-between bg-slate-900/80 border border-slate-800 rounded-2xl p-4 mb-6 shadow-sm backdrop-blur-sm gap-4">
-                <div class="flex items-center space-x-3">
-                    <div class="w-10 h-10 rounded-full bg-green-500/10 flex items-center justify-center text-green-500 border border-green-500/20">
-                        <i class="ph-fill ph-check-circle text-xl"></i>
+        <!-- 画面3: 通信中 (ファイル & 画面共有) -->
+        <div id="screen-session" class="app-screen flex-col lg:flex-row w-full gap-6 items-start">
+            
+            <!-- 左カラム：画面共有 -->
+            <div class="w-full lg:w-7/12 flex flex-col gap-4">
+                <div class="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 shadow-sm backdrop-blur-sm flex flex-col">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="text-sm font-bold text-slate-200 flex items-center">
+                            <i class="ph ph-desktop mr-2 text-lg text-blue-400"></i> 画面共有
+                        </h3>
+                        <button id="btn-share-screen" onclick="toggleScreenShare()" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-semibold transition-all flex items-center space-x-2">
+                            <i class="ph ph-screencast"></i> <span>画面を共有する</span>
+                        </button>
                     </div>
-                    <div>
-                        <p class="text-sm font-bold text-slate-200">暗号化通信 確立済み</p>
-                        <p class="text-xs text-slate-400 font-mono mt-0.5" id="connected-peer-id">相手: -----</p>
+                    
+                    <!-- ビデオ表示エリア -->
+                    <div id="video-container" class="w-full bg-slate-950 border border-slate-800 rounded-xl flex items-center justify-center overflow-hidden min-h-[250px] relative">
+                        <i id="video-placeholder" class="ph ph-monitor text-5xl text-slate-700"></i>
+                        <video id="remote-video" autoplay playsinline class="w-full h-full"></video>
+                        <div id="local-share-indicator" class="hidden absolute inset-0 bg-blue-900/20 backdrop-blur-sm flex flex-col items-center justify-center border-2 border-blue-500 rounded-xl">
+                            <i class="ph-fill ph-screencast text-4xl text-blue-400 mb-2 animate-pulse"></i>
+                            <p class="text-blue-100 font-medium">自分の画面を相手に共有中です</p>
+                        </div>
                     </div>
                 </div>
-                <button onclick="disconnectPeer()" class="px-4 py-2 bg-slate-800 hover:bg-red-500/20 text-slate-300 hover:text-red-400 border border-slate-700 hover:border-red-500/30 rounded-xl text-sm font-medium transition-all flex items-center space-x-2">
-                    <i class="ph ph-power"></i>
-                    <span>切断する</span>
-                </button>
             </div>
 
-            <!-- Drag & Drop Zone -->
-            <div id="drop-zone" class="w-full border-2 border-dashed border-slate-700 bg-slate-900/50 hover:bg-slate-800/80 hover:border-blue-500/50 transition-all duration-200 rounded-3xl p-12 flex flex-col items-center justify-center text-center cursor-pointer relative overflow-hidden group mb-8">
-                <div class="absolute inset-0 bg-blue-500/5 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
-                <div class="w-20 h-20 bg-slate-800 rounded-full flex items-center justify-center text-blue-400 mb-6 group-hover:scale-110 transition-transform duration-300 shadow-xl border border-slate-700">
-                    <i class="ph-bold ph-upload-simple text-3xl"></i>
+            <!-- 右カラム：ファイル転送 -->
+            <div class="w-full lg:w-5/12 flex flex-col gap-4">
+                
+                <!-- ドラッグ＆ドロップゾーン -->
+                <div id="drop-zone" class="w-full border-2 border-dashed border-slate-700 bg-slate-900/50 hover:bg-slate-800/80 hover:border-blue-500/50 transition-all duration-200 rounded-2xl p-8 flex flex-col items-center justify-center text-center cursor-pointer relative overflow-hidden group">
+                    <div class="w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center text-blue-400 mb-4 group-hover:scale-110 transition-transform duration-300 shadow-xl border border-slate-700">
+                        <i class="ph-bold ph-upload-simple text-2xl"></i>
+                    </div>
+                    <h3 class="text-lg font-bold text-slate-200 mb-1">ファイルを送信</h3>
+                    <p class="text-slate-400 text-xs">クリックして選択、またはドロップ</p>
+                    <input type="file" id="file-input" class="hidden" multiple>
                 </div>
-                <h3 class="text-xl font-bold text-slate-200 mb-2">ファイルを選択 または ドロップ</h3>
-                <p class="text-slate-400 text-sm max-w-md mx-auto leading-relaxed">
-                    サイズ制限なし。動画や高解像度写真も、サーバーを通さず自動的に相手の端末へ直接送信されます。
-                </p>
-                <input type="file" id="file-input" class="hidden" multiple>
+
+                <!-- ファイル転送リスト（リクエスト＆履歴） -->
+                <div class="w-full bg-slate-900/80 border border-slate-800 rounded-2xl p-4 flex-grow min-h-[300px]">
+                    <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">転送リスト</h3>
+                    
+                    <div id="transfer-list" class="space-y-3">
+                        <!-- アイテムがここに追加されます -->
+                    </div>
+                    
+                    <div id="empty-history" class="text-center py-10 text-slate-600">
+                        <i class="ph ph-tray text-3xl mb-2 opacity-50"></i>
+                        <p class="text-xs font-medium">ファイル履歴はありません</p>
+                    </div>
+                </div>
             </div>
 
-            <!-- Transfer History -->
-            <div class="w-full">
-                <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4 flex items-center">
-                    <i class="ph ph-list-dashes mr-2 text-lg"></i> 転送履歴
-                </h3>
-                <div id="transfer-list" class="space-y-3">
-                    <!-- Transfer items will be generated here -->
-                </div>
-                <div id="empty-history" class="text-center py-12 text-slate-600 border border-dashed border-slate-800 rounded-2xl bg-slate-900/30">
-                    <i class="ph ph-tray text-4xl mb-3 opacity-50"></i>
-                    <p class="text-sm font-medium">まだファイルのやり取りはありません</p>
-                </div>
-            </div>
         </div>
 
     </main>
 
-    <!-- Initialize Scripts -->
     <script>
         let peer = null;
-        let conn = null;
+        let conn = null; // Data channel connection
         let myId = null;
+        let localStream = null;
+        let mediaCall = null; // Media connection for screen share
         
-        // Data transfer constants
-        const CHUNK_SIZE = 64 * 1024; // 64KB per chunk for WebRTC stability
-        const MAX_BUFFER = 5 * 1024 * 1024; // 5MB buffer limit for backpressure
+        const CHUNK_SIZE = 64 * 1024; // 64KB
+        const MAX_BUFFER = 5 * 1024 * 1024; // 5MB limit for backpressure
 
-        // State for incoming files
-        let incomingFileState = {
-            active: false,
-            meta: null,
-            buffers: [],
-            receivedBytes: 0,
-            uiId: null
-        };
+        // State maps
+        const pendingOutboundFiles = {}; // files sender wants to send { fileId: File }
+        const activeInboundFiles = {};   // files receiver is receiving { fileId: { buffers, size, received } }
 
-        // UI Helpers
         const dom = {
             screens: {
                 loading: document.getElementById('screen-loading'),
                 setup: document.getElementById('screen-setup'),
-                transfer: document.getElementById('screen-transfer')
+                session: document.getElementById('screen-session')
             },
             indicator: document.getElementById('connection-indicator'),
             indicatorDot: document.querySelector('.indicator-dot'),
             indicatorText: document.querySelector('.indicator-text'),
+            btnDisconnect: document.getElementById('btn-disconnect'),
             myIdInput: document.getElementById('my-peer-id'),
             targetIdInput: document.getElementById('target-id'),
-            btnConnect: document.getElementById('btn-connect'),
             dropZone: document.getElementById('drop-zone'),
             fileInput: document.getElementById('file-input'),
             transferList: document.getElementById('transfer-list'),
             emptyHistory: document.getElementById('empty-history'),
-            connectedPeerId: document.getElementById('connected-peer-id')
+            remoteVideo: document.getElementById('remote-video'),
+            videoPlaceholder: document.getElementById('video-placeholder'),
+            btnShareScreen: document.getElementById('btn-share-screen'),
+            localShareIndicator: document.getElementById('local-share-indicator')
         };
 
         function switchScreen(screenName) {
@@ -253,22 +274,8 @@
             }, 4000);
         }
 
-        function updateIndicator(state) {
-            if (state === 'connected') {
-                dom.indicator.className = 'flex items-center text-xs font-medium px-3 py-1.5 rounded-full bg-green-500/10 border border-green-500/20 text-green-400 transition-colors duration-300 shadow-[0_0_10px_rgba(34,197,94,0.2)]';
-                dom.indicatorDot.className = 'w-2 h-2 rounded-full bg-green-500 mr-2 shadow-[0_0_5px_#22c55e]';
-                dom.indicatorText.textContent = '接続済み';
-            } else {
-                dom.indicator.className = 'flex items-center text-xs font-medium px-3 py-1.5 rounded-full bg-slate-900 border border-slate-800 text-slate-400 transition-colors duration-300';
-                dom.indicatorDot.className = 'w-2 h-2 rounded-full bg-slate-500 mr-2';
-                dom.indicatorText.textContent = '未接続';
-            }
-        }
-
-        // Initialize PeerJS
         function initPeer() {
             try {
-                // Using PeerJS default cloud server
                 peer = new Peer({
                     debug: 2,
                     config: {
@@ -285,78 +292,46 @@
                     switchScreen('setup');
                 });
 
+                // 受信側：データ接続
                 peer.on('connection', (connection) => {
-                    // Automatically accept incoming connections if not already connected
-                    if (conn && conn.open) {
-                        connection.close();
-                        return;
-                    }
+                    if (conn && conn.open) { connection.close(); return; }
                     setupConnection(connection);
+                });
+
+                // 受信側：メディア接続（画面共有）
+                peer.on('call', (call) => {
+                    // 自動応答
+                    call.answer();
+                    setupMediaCall(call);
                 });
 
                 peer.on('error', (err) => {
                     console.error("PeerJS Error:", err);
-                    showToast(getJapaneseErrorMessage(err.type), 'error');
-                    
-                    // Fallback to setup if init fails drastically
-                    if (!myId) {
-                        dom.screens.loading.innerHTML = `
-                            <i class="ph-fill ph-warning-circle text-5xl text-red-500 mb-6"></i>
-                            <h2 class="text-xl font-bold mb-2">初期化エラー</h2>
-                            <p class="text-slate-400 text-sm mb-6">ネットワーク接続またはシグナリングサーバーを確認してください。</p>
-                            <button onclick="location.reload()" class="px-6 py-2 bg-slate-800 rounded-xl hover:bg-slate-700 transition">再読み込み</button>
-                        `;
-                    }
-                });
-
-                peer.on('disconnected', () => {
-                    // Try to reconnect to signaling server if disconnected
-                    if(!peer.destroyed) peer.reconnect();
+                    showToast(`エラー: ${err.type}`, 'error');
                 });
 
             } catch (error) {
-                console.error("Critical PeerJS initialization error:", error);
-                showToast("初期化に失敗しました。", 'error');
+                console.error("Init error:", error);
+                showToast("初期化に失敗しました", 'error');
             }
-        }
-
-        function getJapaneseErrorMessage(type) {
-            const errors = {
-                'browser-incompatible': 'お使いのブラウザはWebRTCをサポートしていません。',
-                'disconnected': 'サーバーから切断されました。',
-                'invalid-id': '無効なIDです。',
-                'network': 'ネットワークエラーが発生しました。',
-                'peer-unavailable': '指定されたIDの相手が見つかりません。',
-                'webrtc': 'WebRTCエラーが発生しました。'
-            };
-            return errors[type] || 'エラーが発生しました。 (' + type + ')';
         }
 
         window.copyMyId = () => {
             if(!myId) return;
             dom.myIdInput.select();
             document.execCommand('copy');
-            showToast("IDをクリップボードにコピーしました", 'success');
+            showToast("IDをコピーしました", 'success');
         };
 
         window.connectToPeer = () => {
             const targetId = dom.targetIdInput.value.trim();
-            if (!targetId) {
-                showToast("相手のIDを入力してください", 'error');
-                return;
-            }
-            if (targetId === myId) {
-                showToast("自分自身には接続できません", 'error');
-                return;
-            }
+            if (!targetId || targetId === myId) return showToast("有効な相手のIDを入力してください", 'error');
 
-            dom.btnConnect.innerHTML = '<i class="ph ph-spinner animate-spin text-lg"></i> <span>接続中</span>';
-            dom.btnConnect.disabled = true;
+            const btn = document.getElementById('btn-connect');
+            btn.innerHTML = '<i class="ph ph-spinner animate-spin"></i> <span>接続中</span>';
+            btn.disabled = true;
 
-            const connection = peer.connect(targetId, {
-                reliable: true // Ensures ordered, reliable delivery
-            });
-
+            const connection = peer.connect(targetId, { reliable: true });
             setupConnection(connection);
         };
 
@@ -365,109 +340,239 @@
 
             conn.on('open', () => {
                 showToast("接続が確立されました！", 'success');
-                dom.connectedPeerId.textContent = `相手のID: ${conn.peer}`;
-                switchScreen('transfer');
-                updateIndicator('connected');
+                switchScreen('session');
                 
-                // Reset Connect button if we were the initiator
-                dom.btnConnect.innerHTML = '<i class="ph ph-link text-lg"></i> <span>接続</span>';
-                dom.btnConnect.disabled = false;
-                dom.targetIdInput.value = '';
+                dom.indicator.className = 'flex items-center text-xs font-medium px-3 py-1.5 rounded-full bg-green-500/10 border border-green-500/20 text-green-400';
+                dom.indicatorDot.className = 'w-2 h-2 rounded-full bg-green-500 mr-2 shadow-[0_0_5px_#22c55e]';
+                dom.indicatorText.textContent = `相手: ${conn.peer}`;
+                dom.btnDisconnect.classList.remove('hidden');
+                dom.btnDisconnect.classList.add('flex');
+                
+                const btn = document.getElementById('btn-connect');
+                if(btn) {
+                    btn.innerHTML = '<i class="ph ph-link"></i> <span>接続</span>';
+                    btn.disabled = false;
+                    dom.targetIdInput.value = '';
+                }
             });
 
             conn.on('data', handleIncomingData);
 
             conn.on('close', () => {
-                showToast("相手との接続が切断されました", 'error');
+                showToast("相手との通信が切断されました", 'error');
                 handleDisconnect();
             });
-
-            conn.on('error', (err) => {
-                console.error("Connection error:", err);
-                showToast("通信エラーが発生しました", 'error');
-                handleDisconnect();
-            });
+            conn.on('error', () => { handleDisconnect(); });
         }
 
         window.disconnectPeer = () => {
-            if (conn) {
-                conn.close();
-            }
+            if (conn) conn.close();
+            if (mediaCall) mediaCall.close();
             handleDisconnect();
         };
 
         function handleDisconnect() {
             conn = null;
-            incomingFileState.active = false;
-            updateIndicator('disconnected');
+            if(localStream) stopLocalStream();
+            
+            dom.indicator.className = 'flex items-center text-xs font-medium px-3 py-1.5 rounded-full bg-slate-900 border border-slate-800 text-slate-400';
+            dom.indicatorDot.className = 'w-2 h-2 rounded-full bg-slate-500 mr-2';
+            dom.indicatorText.textContent = '未接続';
+            dom.btnDisconnect.classList.add('hidden');
+            dom.btnDisconnect.classList.remove('flex');
+            
+            dom.remoteVideo.srcObject = null;
+            dom.remoteVideo.classList.remove('active');
+            dom.videoPlaceholder.style.display = 'block';
+
+            dom.transferList.innerHTML = '';
+            dom.emptyHistory.style.display = 'block';
+
             switchScreen('setup');
         }
 
-        async function handleIncomingData(data) {
-            if (typeof data === 'string') {
-                try {
-                    const msg = JSON.parse(data);
-                    
-                    if (msg.type === 'meta') {
-                        // Start of a new file transfer
-                        incomingFileState = {
-                            active: true,
-                            meta: msg,
-                            buffers: [],
-                            receivedBytes: 0,
-                            uiId: 'rx-' + Date.now()
-                        };
-                        createTransferUI(incomingFileState.uiId, msg.name, msg.size, false);
-                    } 
-                    else if (msg.type === 'eof') {
-                        // End of file transfer -> assemble and download
-                        if (incomingFileState.active && incomingFileState.buffers.length > 0) {
-                            const blob = new Blob(incomingFileState.buffers, { type: incomingFileState.meta.mime });
-                            completeTransferUI(incomingFileState.uiId, blob, incomingFileState.meta.name);
-                            triggerDownload(blob, incomingFileState.meta.name);
-                        }
-                        incomingFileState.active = false;
-                        incomingFileState.buffers = [];
-                    }
-                } catch (e) {
-                    console.error("Error parsing JSON message:", e);
+        async function toggleScreenShare() {
+            if (!conn || !conn.open) return showToast("接続されていません", 'error');
+
+            if (localStream) {
+                // 停止
+                stopLocalStream();
+                if(mediaCall) mediaCall.close();
+                return;
+            }
+
+            try {
+                localStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+                
+                // ユーザーが共有停止ボタンを押した時の処理
+                localStream.getVideoTracks()[0].onended = () => {
+                    stopLocalStream();
+                    if(mediaCall) mediaCall.close();
+                };
+
+                mediaCall = peer.call(conn.peer, localStream);
+                setupMediaCall(mediaCall);
+                
+                dom.btnShareScreen.innerHTML = '<i class="ph ph-stop-circle"></i> <span>共有を停止</span>';
+                dom.btnShareScreen.classList.replace('bg-blue-600', 'bg-red-600');
+                dom.btnShareScreen.classList.replace('hover:bg-blue-500', 'hover:bg-red-500');
+                
+                dom.videoPlaceholder.style.display = 'none';
+                dom.localShareIndicator.classList.remove('hidden');
+
+            } catch (err) {
+                console.error("Screen share error:", err);
+                showToast("画面共有がキャンセルされたか、許可されませんでした", 'error');
+            }
+        }
+
+        function stopLocalStream() {
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+                localStream = null;
+            }
+            dom.btnShareScreen.innerHTML = '<i class="ph ph-screencast"></i> <span>画面を共有する</span>';
+            dom.btnShareScreen.classList.replace('bg-red-600', 'bg-blue-600');
+            dom.btnShareScreen.classList.replace('hover:bg-red-500', 'hover:bg-blue-500');
+            dom.localShareIndicator.classList.add('hidden');
+            if (!dom.remoteVideo.srcObject) dom.videoPlaceholder.style.display = 'block';
+        }
+
+        function setupMediaCall(call) {
+            mediaCall = call;
+            call.on('stream', (remoteStream) => {
+                // 相手の画面を受信
+                dom.videoPlaceholder.style.display = 'none';
+                dom.remoteVideo.srcObject = remoteStream;
+                dom.remoteVideo.classList.add('active');
+            });
+            call.on('close', () => {
+                dom.remoteVideo.srcObject = null;
+                dom.remoteVideo.classList.remove('active');
+                if(!localStream) dom.videoPlaceholder.style.display = 'block';
+            });
+        }
+
+        function handleIncomingData(data) {
+            // データの種類を判定
+            if (data.type === 'file-offer') {
+                // 相手から送信リクエストが来た
+                createOfferUI(data.fileId, data.filename, data.size);
+            } 
+            else if (data.type === 'file-answer') {
+                // 相手がリクエストを回答した
+                const { fileId, accepted } = data;
+                if (accepted) {
+                    startFileTransmission(fileId);
+                } else {
+                    updateTransferStatus(fileId, '拒否されました', 'text-red-400');
+                    delete pendingOutboundFiles[fileId];
                 }
-            } else if (data instanceof ArrayBuffer || data instanceof Uint8Array) {
-                // Receiving file chunks
-                if (incomingFileState.active) {
-                    incomingFileState.buffers.push(data);
-                    incomingFileState.receivedBytes += data.byteLength;
-                    updateProgressUI(incomingFileState.uiId, incomingFileState.receivedBytes, incomingFileState.meta.size);
+            }
+            else if (data.type === 'file-data') {
+                // チャンクデータの受信
+                const { fileId, chunk } = data;
+                if (activeInboundFiles[fileId]) {
+                    activeInboundFiles[fileId].buffers.push(chunk);
+                    activeInboundFiles[fileId].received += chunk.byteLength;
+                    updateProgressUI(fileId, activeInboundFiles[fileId].received, activeInboundFiles[fileId].size);
+                }
+            }
+            else if (data.type === 'file-eof') {
+                // 送信完了
+                const { fileId, filename, mime } = data;
+                if (activeInboundFiles[fileId]) {
+                    const blob = new Blob(activeInboundFiles[fileId].buffers, { type: mime });
+                    completeReceiveUI(fileId, blob, filename);
+                    delete activeInboundFiles[fileId];
                 }
             }
         }
 
-        async function sendFile(file) {
-            if (!conn || !conn.open) {
-                showToast("相手と接続されていません", 'error');
-                return;
-            }
+        // 送信ステップ1: リクエストを送る
+        function initiateFileSend(file) {
+            if (!conn || !conn.open) return showToast("接続されていません", 'error');
 
-            const uiId = 'tx-' + Date.now();
-            createTransferUI(uiId, file.name, file.size, true);
+            const fileId = 'tx-' + Date.now() + '-' + Math.floor(Math.random()*1000);
+            pendingOutboundFiles[fileId] = file;
+
+            // 送信側のUIを作成（待機状態）
+            createTransferUI(fileId, file.name, file.size, true);
+            updateTransferStatus(fileId, '相手の承認を待機中...', 'text-yellow-400');
+
+            // オファーを送信
+            conn.send({
+                type: 'file-offer',
+                fileId: fileId,
+                filename: file.name,
+                size: file.size,
+                mime: file.type || 'application/octet-stream'
+            });
+        }
+
+        // 受信ステップ1: リクエストのUIを表示する
+        function createOfferUI(fileId, filename, size) {
+            dom.emptyHistory.style.display = 'none';
+
+            const item = document.createElement('div');
+            item.id = `item-${fileId}`;
+            item.className = 'bg-slate-800 border border-blue-500/30 rounded-xl p-4 flex flex-col shadow-lg animate-pulse';
+            
+            item.innerHTML = `
+                <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center space-x-3 overflow-hidden">
+                        <div class="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center flex-shrink-0">
+                            <i class="ph-fill ph-bell-ringing text-xl text-blue-400"></i>
+                        </div>
+                        <div class="min-w-0">
+                            <h4 class="text-sm font-semibold text-slate-100 truncate">ファイル受信リクエスト</h4>
+                            <p class="text-xs text-slate-400 truncate">${filename} (${formatBytes(size)})</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex space-x-2 mt-1">
+                    <button onclick="respondToOffer('${fileId}', true, '${filename}', ${size})" class="flex-1 bg-blue-600 hover:bg-blue-500 text-white py-1.5 rounded-lg text-xs font-semibold transition-colors">受け取る</button>
+                    <button onclick="respondToOffer('${fileId}', false, '', 0)" class="flex-1 bg-slate-700 hover:bg-red-500/20 hover:text-red-400 text-slate-300 py-1.5 rounded-lg text-xs font-semibold transition-colors">拒否</button>
+                </div>
+            `;
+            dom.transferList.prepend(item);
+        }
+
+        // 受信ステップ2: リクエストに回答する
+        window.respondToOffer = (fileId, accepted, filename, size) => {
+            const item = document.getElementById(`item-${fileId}`);
+            if(item) item.remove();
+
+            conn.send({
+                type: 'file-answer',
+                fileId: fileId,
+                accepted: accepted
+            });
+
+            if (accepted) {
+                // 受信準備
+                activeInboundFiles[fileId] = { buffers: [], size: size, received: 0 };
+                createTransferUI(fileId, filename, size, false);
+                updateTransferStatus(fileId, '受信中 (0%)', 'text-purple-400');
+            } else {
+                showToast("ファイルの受信を拒否しました");
+                checkEmptyList();
+            }
+        };
+
+        // 送信ステップ2: 承認されたらデータをチャンクで送る
+        async function startFileTransmission(fileId) {
+            const file = pendingOutboundFiles[fileId];
+            if (!file) return;
+
+            updateTransferStatus(fileId, '送信中 (0%)', 'text-blue-400');
 
             try {
-                // 1. Send Metadata
-                const meta = {
-                    type: 'meta',
-                    name: file.name,
-                    size: file.size,
-                    mime: file.type || 'application/octet-stream'
-                };
-                conn.send(JSON.stringify(meta));
-
-                // 2. Read and send in chunks
                 let offset = 0;
                 while (offset < file.size) {
-                    // Check connection status
-                    if (!conn || !conn.open) throw new Error("Connection closed during transfer");
-
-                    // Backpressure management: wait if WebRTC buffer is too full
+                    if (!conn || !conn.open) throw new Error("Connection closed");
+                    
+                    // Backpressure control
                     while (conn.dataChannel && conn.dataChannel.bufferedAmount > MAX_BUFFER) {
                         await new Promise(r => setTimeout(r, 50));
                     }
@@ -475,185 +580,159 @@
                     const slice = file.slice(offset, offset + CHUNK_SIZE);
                     const buffer = await slice.arrayBuffer();
                     
-                    conn.send(buffer);
-                    offset += buffer.byteLength;
+                    // JSオブジェクトとしてラップして送信（PeerJSがシリアライズを処理）
+                    conn.send({
+                        type: 'file-data',
+                        fileId: fileId,
+                        chunk: buffer
+                    });
                     
-                    // Throttle UI updates slightly for performance
+                    offset += buffer.byteLength;
                     if (offset % (CHUNK_SIZE * 5) === 0 || offset >= file.size) {
-                        updateProgressUI(uiId, offset, file.size);
+                        updateProgressUI(fileId, offset, file.size);
                     }
                 }
 
-                // 3. Send EOF signal
-                conn.send(JSON.stringify({ type: 'eof' }));
-                
-                // Mark complete on UI
-                completeTransferUI(uiId, null, file.name);
-                showToast(`${file.name} を送信しました`, 'success');
+                // EOF送信
+                conn.send({
+                    type: 'file-eof',
+                    fileId: fileId,
+                    filename: file.name,
+                    mime: file.type || 'application/octet-stream'
+                });
+
+                completeSendUI(fileId);
+                delete pendingOutboundFiles[fileId];
 
             } catch (err) {
-                console.error("File sending error:", err);
-                showToast("ファイルの送信中にエラーが発生しました", 'error');
-                const statusEl = document.getElementById(`status-${uiId}`);
-                if (statusEl) {
-                    statusEl.textContent = 'エラー';
-                    statusEl.classList.add('text-red-400');
-                }
+                console.error("Send error:", err);
+                updateTransferStatus(fileId, 'エラーが発生しました', 'text-red-400');
             }
         }
-
-        function triggerDownload(blob, filename) {
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.style.display = 'none';
-            a.href = url;
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            
-            // Cleanup
-            setTimeout(() => {
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-            }, 1000);
-            
-            showToast(`${filename} の受信が完了しました`, 'success');
-        }
-
-        dom.dropZone.addEventListener('click', () => dom.fileInput.click());
-
-        dom.fileInput.addEventListener('change', (e) => {
-            const files = e.target.files;
-            for (let file of files) {
-                sendFile(file);
-            }
-            dom.fileInput.value = ''; // reset
-        });
-
-        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-            dom.dropZone.addEventListener(eventName, (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-            }, false);
-        });
-
-        ['dragenter', 'dragover'].forEach(eventName => {
-            dom.dropZone.addEventListener(eventName, () => {
-                dom.dropZone.classList.add('drag-over');
-            }, false);
-        });
-
-        ['dragleave', 'drop'].forEach(eventName => {
-            dom.dropZone.addEventListener(eventName, () => {
-                dom.dropZone.classList.remove('drag-over');
-            }, false);
-        });
-
-        dom.dropZone.addEventListener('drop', (e) => {
-            const files = e.dataTransfer.files;
-            for (let file of files) {
-                sendFile(file);
-            }
-        }, false);
-
 
         function formatBytes(bytes) {
             if (bytes === 0) return '0 B';
-            const k = 1024;
-            const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+            const k = 1024, sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
             const i = Math.floor(Math.log(bytes) / Math.log(k));
             return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
         }
 
         function createTransferUI(id, filename, filesize, isSending) {
             dom.emptyHistory.style.display = 'none';
-
             const iconClass = isSending ? 'ph-arrow-up-right text-blue-400' : 'ph-arrow-down-left text-purple-400';
             const bgClass = isSending ? 'bg-blue-500/10' : 'bg-purple-500/10';
-            const actionText = isSending ? '送信中...' : '受信中...';
 
             const item = document.createElement('div');
             item.id = `item-${id}`;
-            item.className = 'bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col shadow-sm transition-all animate-[fadeIn_0.3s_ease-out]';
-            
+            item.className = 'bg-slate-950 border border-slate-800 rounded-xl p-3 flex flex-col shadow-sm transition-all';
             item.innerHTML = `
-                <div class="flex items-center justify-between mb-3">
+                <div class="flex items-center justify-between mb-2">
                     <div class="flex items-center space-x-3 overflow-hidden">
-                        <div class="w-10 h-10 rounded-xl ${bgClass} flex items-center justify-center flex-shrink-0">
-                            <i class="ph ${iconClass} text-xl"></i>
+                        <div class="w-8 h-8 rounded-lg ${bgClass} flex items-center justify-center flex-shrink-0">
+                            <i class="ph ${iconClass} text-lg"></i>
                         </div>
                         <div class="min-w-0">
                             <h4 class="text-sm font-semibold text-slate-200 truncate" title="${filename}">${filename}</h4>
-                            <div class="flex items-center text-xs text-slate-500 mt-1 space-x-2 font-mono">
+                            <div class="flex items-center text-[10px] text-slate-500 font-mono space-x-2">
                                 <span>${formatBytes(filesize)}</span>
                                 <span>•</span>
-                                <span id="status-${id}" class="text-blue-400 font-medium">${actionText} (0%)</span>
+                                <span id="status-${id}">準備中...</span>
                             </div>
                         </div>
                     </div>
-                    <div id="action-${id}" class="flex-shrink-0 ml-3">
-                        <i class="ph ph-spinner animate-spin text-slate-400 text-lg"></i>
+                    <div id="action-${id}" class="flex-shrink-0 ml-2">
+                        <i class="ph ph-spinner animate-spin text-slate-500"></i>
                     </div>
                 </div>
-                <div id="bar-container-${id}" class="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                    <div id="bar-${id}" class="h-full bg-gradient-to-r from-blue-500 to-purple-500 w-0 transition-all duration-200"></div>
+                <div id="bar-container-${id}" class="w-full h-1 bg-slate-800 rounded-full overflow-hidden">
+                    <div id="bar-${id}" class="h-full bg-gradient-to-r ${isSending ? 'from-blue-600 to-blue-400' : 'from-purple-600 to-purple-400'} w-0 transition-all duration-200"></div>
                 </div>
             `;
-            
+            // Remove pulse animation if it was an offer card replaced
+            item.classList.remove('animate-pulse');
             dom.transferList.prepend(item);
+        }
+
+        function updateTransferStatus(id, text, colorClass) {
+            const status = document.getElementById(`status-${id}`);
+            if (status) {
+                status.textContent = text;
+                status.className = colorClass;
+            }
+            if(text.includes('拒否')) {
+                const action = document.getElementById(`action-${id}`);
+                const bar = document.getElementById(`bar-container-${id}`);
+                if(action) action.innerHTML = '<i class="ph-fill ph-x-circle text-red-500 text-lg"></i>';
+                if(bar) bar.style.display = 'none';
+            }
         }
 
         function updateProgressUI(id, current, total) {
             const bar = document.getElementById(`bar-${id}`);
             const status = document.getElementById(`status-${id}`);
             if (!bar || !status) return;
-
             const percent = Math.min(100, Math.round((current / total) * 100));
             bar.style.width = `${percent}%`;
             
-            const actionText = id.startsWith('tx-') ? '送信中' : '受信中';
-            status.textContent = `${actionText} (${percent}%)`;
+            // Extract current action word based on color to keep it simple
+            const isSending = status.className.includes('blue');
+            status.textContent = `${isSending ? '送信中' : '受信中'} (${percent}%)`;
         }
 
-        function completeTransferUI(id, blob, filename) {
-            const barContainer = document.getElementById(`bar-container-${id}`);
-            const status = document.getElementById(`status-${id}`);
-            const actionBtn = document.getElementById(`action-${id}`);
-            const isSending = id.startsWith('tx-');
+        function completeSendUI(id) {
+            updateTransferStatus(id, '送信完了', 'text-green-400');
+            const bar = document.getElementById(`bar-container-${id}`);
+            const action = document.getElementById(`action-${id}`);
+            if(bar) bar.style.display = 'none';
+            if(action) action.innerHTML = '<i class="ph-fill ph-check-circle text-green-500 text-lg"></i>';
+            showToast("送信が完了しました", 'success');
+        }
 
-            if (barContainer) barContainer.style.display = 'none';
+        function completeReceiveUI(id, blob, filename) {
+            updateTransferStatus(id, '受信完了', 'text-green-400');
+            const bar = document.getElementById(`bar-container-${id}`);
+            const action = document.getElementById(`action-${id}`);
+            if(bar) bar.style.display = 'none';
             
-            if (status) {
-                status.textContent = isSending ? '送信完了' : '受信完了';
-                status.className = 'text-green-400 font-medium';
+            if(action) {
+                const url = URL.createObjectURL(blob);
+                action.innerHTML = `
+                    <a href="${url}" download="${filename}" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 rounded text-xs font-semibold flex items-center space-x-1 transition-colors">
+                        <i class="ph ph-download-simple"></i><span>保存</span>
+                    </a>
+                `;
+                // Auto trigger download for convenience
+                const a = document.createElement('a');
+                a.href = url; a.download = filename;
+                document.body.appendChild(a); a.click(); document.body.removeChild(a);
             }
+            showToast(`${filename} を受信しました`, 'success');
+        }
 
-            if (actionBtn) {
-                if (isSending) {
-                    actionBtn.innerHTML = `<i class="ph-fill ph-check-circle text-green-500 text-xl shadow-[0_0_15px_rgba(34,197,94,0.3)] rounded-full"></i>`;
-                } else if (blob) {
-                    const url = URL.createObjectURL(blob);
-                    actionBtn.innerHTML = `
-                        <a href="${url}" download="${filename}" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 rounded-lg text-xs font-semibold flex items-center space-x-1 transition-colors">
-                            <i class="ph ph-download-simple"></i>
-                            <span>保存</span>
-                        </a>
-                    `;
-                }
+        function checkEmptyList() {
+            if(dom.transferList.children.length === 0) {
+                dom.emptyHistory.style.display = 'block';
             }
         }
 
-        /* Add simple CSS animation dynamically */
-        const style = document.createElement('style');
-        style.innerHTML = `
-            @keyframes fadeIn {
-                from { opacity: 0; transform: translateY(10px); }
-                to { opacity: 1; transform: translateY(0); }
-            }
-        `;
-        document.head.appendChild(style);
+        // File Input Event Listeners
+        dom.dropZone.addEventListener('click', () => dom.fileInput.click());
+        dom.fileInput.addEventListener('change', (e) => {
+            Array.from(e.target.files).forEach(initiateFileSend);
+            dom.fileInput.value = '';
+        });
 
-        // Start initialization on window load
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(e => {
+            dom.dropZone.addEventListener(e, ev => { ev.preventDefault(); ev.stopPropagation(); }, false);
+        });
+        ['dragenter', 'dragover'].forEach(e => dom.dropZone.addEventListener(e, () => dom.dropZone.classList.add('drag-over'), false));
+        ['dragleave', 'drop'].forEach(e => dom.dropZone.addEventListener(e, () => dom.dropZone.classList.remove('drag-over'), false));
+        
+        dom.dropZone.addEventListener('drop', (e) => {
+            Array.from(e.dataTransfer.files).forEach(initiateFileSend);
+        }, false);
+
+        // Start App
         window.onload = initPeer;
 
     </script>
