@@ -1,0 +1,884 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DirectDrop - 高画質P2Pファイル共有</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a; /* tailwind slate-900 */
+            color: #f1f5f9; /* tailwind slate-100 */
+        }
+        
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #1e293b; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+
+        /* Animations */
+        .pulse-glow { animation: pulseGlow 2s infinite; }
+        @keyframes pulseGlow {
+            0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4); }
+            70% { box-shadow: 0 0 0 15px rgba(59, 130, 246, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+        }
+
+        .fade-in { animation: fadeIn 0.3s ease-out forwards; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .screen { display: none; }
+        .screen.active { display: block; animation: fadeIn 0.4s ease-out; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+<!-- Header -->
+<header class="py-4 px-6 border-b border-slate-800 bg-slate-900/90 backdrop-blur sticky top-0 z-20 shadow-sm">
+    <div class="max-w-5xl mx-auto flex justify-between items-center">
+        <h1 class="text-2xl font-black tracking-tight flex items-center space-x-2">
+            <i class="ph-fill ph-paper-plane-tilt text-blue-500 text-3xl"></i>
+            <span class="bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-indigo-400">
+                DirectDrop
+            </span>
+        </h1>
+        <div class="hidden sm:flex items-center space-x-4">
+            <div class="text-xs font-semibold px-3 py-1.5 bg-slate-800 rounded-full text-slate-300 border border-slate-700 flex items-center shadow-inner">
+                <div class="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
+                P2P 無圧縮転送
+            </div>
+        </div>
+    </div>
+</header>
+
+<main class="flex-grow p-4 sm:p-6 md:p-8 flex flex-col items-center w-full max-w-5xl mx-auto">
+
+    <!-- Loading Screen -->
+    <div id="screen-loading" class="screen active w-full flex-grow flex items-center justify-center">
+        <div class="text-center">
+            <i class="ph ph-spinner-gap text-5xl text-blue-500 animate-spin mb-4 inline-block"></i>
+            <p class="text-slate-400 font-medium">システムを初期化中...</p>
+        </div>
+    </div>
+
+    <!-- Home Screen -->
+    <div id="screen-home" class="screen w-full max-w-3xl w-full">
+        <div class="text-center mb-10 mt-4 sm:mt-10">
+            <h2 class="text-3xl sm:text-4xl font-bold mb-4 text-white">サーバーを通さず、直接つながる。</h2>
+            <p class="text-slate-400 text-lg mb-2">高画質の写真や大容量ファイルも、劣化なし・容量無制限で即座に共有。</p>
+        </div>
+
+        <!-- Features Grid -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-10">
+            <div class="bg-slate-800/80 p-5 rounded-2xl border border-slate-700 text-center flex flex-col items-center hover:bg-slate-800 transition">
+                <div class="w-12 h-12 bg-blue-500/20 text-blue-400 rounded-xl flex items-center justify-center mb-3">
+                    <i class="ph ph-image text-2xl"></i>
+                </div>
+                <h3 class="font-bold text-slate-200 mb-1">画質そのまま</h3>
+                <p class="text-xs text-slate-400">再圧縮やリサイズなし。オリジナルの高画質データをそのまま転送します。</p>
+            </div>
+            <div class="bg-slate-800/80 p-5 rounded-2xl border border-slate-700 text-center flex flex-col items-center hover:bg-slate-800 transition">
+                <div class="w-12 h-12 bg-indigo-500/20 text-indigo-400 rounded-xl flex items-center justify-center mb-3">
+                    <i class="ph ph-rocket-launch text-2xl"></i>
+                </div>
+                <h3 class="font-bold text-slate-200 mb-1">高速・容量無制限</h3>
+                <p class="text-xs text-slate-400">P2P通信でデバイス同士を直接結ぶため、大容量ファイルも高速に送れます。</p>
+            </div>
+            <div class="bg-slate-800/80 p-5 rounded-2xl border border-slate-700 text-center flex flex-col items-center hover:bg-slate-800 transition">
+                <div class="w-12 h-12 bg-green-500/20 text-green-400 rounded-xl flex items-center justify-center mb-3">
+                    <i class="ph ph-shield-check text-2xl"></i>
+                </div>
+                <h3 class="font-bold text-slate-200 mb-1">高い安全性</h3>
+                <p class="text-xs text-slate-400">データはサーバーに保存されません。ブラウザ間で直接暗号化通信を行います。</p>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- Create Room Card -->
+            <div class="bg-slate-800 p-8 rounded-3xl border border-slate-700 shadow-xl flex flex-col items-center text-center relative overflow-hidden group">
+                <div class="absolute inset-0 bg-gradient-to-br from-blue-600/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                <div class="w-16 h-16 bg-blue-500/10 text-blue-400 rounded-full flex items-center justify-center mb-4 z-10">
+                    <i class="ph ph-plus text-3xl"></i>
+                </div>
+                <h3 class="text-xl font-bold mb-2 text-white z-10">新しく共有を始める</h3>
+                <p class="text-sm text-slate-400 mb-8 z-10">ルームを作成して、相手にIDを教えます。</p>
+                <button onclick="createRoom()" class="w-full py-3.5 px-6 bg-blue-600 hover:bg-blue-500 text-white font-semibold rounded-xl shadow-[0_0_15px_rgba(37,99,235,0.3)] transition-all z-10 active:scale-95">
+                    ルームを作成する
+                </button>
+            </div>
+
+            <!-- Join Room Card -->
+            <div class="bg-slate-800 p-8 rounded-3xl border border-slate-700 shadow-xl flex flex-col items-center text-center relative overflow-hidden group">
+                <div class="absolute inset-0 bg-gradient-to-br from-indigo-600/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                <div class="w-16 h-16 bg-indigo-500/10 text-indigo-400 rounded-full flex items-center justify-center mb-4 z-10">
+                    <i class="ph ph-sign-in text-3xl"></i>
+                </div>
+                <h3 class="text-xl font-bold mb-2 text-white z-10">ルームに参加する</h3>
+                <p class="text-sm text-slate-400 mb-4 z-10">教えてもらった6桁のIDを入力します。</p>
+                
+                <div class="w-full mt-auto z-10">
+                    <input type="text" id="join-room-id" placeholder="6桁のID" maxlength="6" class="w-full bg-slate-900 border border-slate-600 text-white rounded-xl px-4 py-3 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-center tracking-widest text-xl mb-3 placeholder:text-slate-600 placeholder:tracking-normal placeholder:text-base transition">
+                    <button onclick="attemptJoinRoom()" class="w-full py-3.5 px-6 bg-slate-700 hover:bg-slate-600 text-white font-semibold rounded-xl transition-all active:scale-95 border border-slate-600 hover:border-slate-500">
+                        参加する
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Waiting Screen -->
+    <div id="screen-waiting" class="screen w-full max-w-xl">
+        <div class="bg-slate-800 p-10 rounded-3xl border border-slate-700 shadow-2xl text-center mt-10">
+            <div class="inline-flex items-center justify-center w-24 h-24 rounded-full bg-blue-500/10 mb-6 pulse-glow">
+                <i class="ph ph-radar text-5xl text-blue-400"></i>
+            </div>
+            <h2 class="text-2xl font-bold mb-2 text-white">接続を待機中...</h2>
+            <p class="text-slate-400 mb-8 text-sm">ファイルの受け取り手に、以下のルームIDを伝えてください。</p>
+            
+            <div class="flex flex-col items-center justify-center space-y-5">
+                <div class="text-6xl sm:text-7xl font-black tracking-[0.25em] text-white bg-slate-900 py-6 px-4 w-full rounded-2xl border border-slate-600 shadow-inner select-all cursor-pointer" id="display-room-id" onclick="copyRoomId()" title="クリックでコピー">
+                    ------
+                </div>
+                <button onclick="copyRoomId()" class="flex items-center space-x-2 text-blue-400 hover:text-blue-300 transition px-5 py-2.5 rounded-xl bg-slate-700/50 hover:bg-slate-700">
+                    <i class="ph ph-copy text-lg"></i>
+                    <span class="font-medium">IDをコピーする</span>
+                </button>
+            </div>
+            
+            <button onclick="resetApp()" class="mt-12 text-slate-500 hover:text-slate-300 underline text-sm transition">
+                キャンセルしてトップに戻る
+            </button>
+        </div>
+    </div>
+
+    <!-- Chat / File Transfer Screen -->
+    <div id="screen-chat" class="screen w-full max-w-3xl">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between mb-6 bg-slate-800 p-4 rounded-2xl border border-slate-700 shadow-sm gap-4">
+            <div class="flex items-center space-x-3">
+                <div class="w-3 h-3 bg-green-500 rounded-full shadow-[0_0_10px_rgba(34,197,94,0.6)] animate-pulse"></div>
+                <div>
+                    <div class="font-bold text-slate-200">P2P 接続確立済み</div>
+                    <div class="text-xs text-slate-400">エンドツーエンドで直接通信中 (Room: <span id="chat-room-id" class="font-mono">---</span>)</div>
+                </div>
+            </div>
+            <button onclick="resetApp()" class="text-sm px-4 py-2 bg-slate-700 hover:bg-red-500/20 hover:text-red-400 rounded-lg text-slate-300 transition-colors border border-slate-600 hover:border-red-500/30 flex items-center space-x-1">
+                <i class="ph ph-power"></i>
+                <span>切断する</span>
+            </button>
+        </div>
+        
+        <!-- Drop Zone -->
+        <div id="drop-zone" class="border-2 border-dashed border-slate-600 bg-slate-800/40 rounded-3xl p-10 sm:p-16 text-center hover:bg-slate-800/80 hover:border-blue-500 transition-all cursor-pointer flex flex-col items-center justify-center mb-8 relative overflow-hidden group shadow-sm">
+            <div class="absolute inset-0 bg-blue-500/5 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out"></div>
+            <i class="ph ph-upload-simple text-6xl text-blue-400 mb-4 transform group-hover:-translate-y-2 transition-transform duration-300"></i>
+            <p class="text-white font-bold text-lg sm:text-xl mb-2 z-10">クリック または ファイルをドロップ</p>
+            <p class="text-slate-400 text-sm z-10 max-w-md">写真や動画も、自動で圧縮されることなくオリジナルの最高画質のまま相手に届きます。</p>
+            <input type="file" id="file-input" class="hidden" multiple>
+        </div>
+        
+        <!-- File List -->
+        <div class="bg-slate-800/30 rounded-3xl p-6 border border-slate-800">
+            <h3 class="text-sm font-bold mb-4 text-slate-400 uppercase tracking-wider flex items-center">
+                <i class="ph ph-list-dashes mr-2 text-lg"></i> 転送履歴
+            </h3>
+            <div id="file-list" class="space-y-3 empty:hidden">
+                <!-- File items will be inserted here -->
+            </div>
+            <div id="empty-list-msg" class="text-center py-10 text-slate-500 text-sm">
+                まだファイルは送受信されていません
+            </div>
+        </div>
+    </div>
+
+</main>
+
+<!-- Toast Notification -->
+<div id="toast" class="fixed bottom-6 left-1/2 transform -translate-x-1/2 bg-slate-800 border border-slate-700 text-white px-6 py-3 rounded-full shadow-2xl transition-all duration-300 translate-y-20 opacity-0 z-50 flex items-center space-x-3 backdrop-blur-md">
+    <i class="ph-fill ph-info text-blue-400 text-xl"></i>
+    <span id="toast-message" class="font-medium text-sm"></span>
+</div>
+
+<!-- Custom Modal -->
+<div id="modal-overlay" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4 transition-opacity">
+    <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-2xl max-w-sm w-full transform transition-transform scale-95" id="modal-content">
+        <div class="flex items-center space-x-3 mb-4">
+            <div class="w-10 h-10 rounded-full bg-red-500/10 flex items-center justify-center text-red-400">
+                <i class="ph ph-warning-circle text-2xl"></i>
+            </div>
+            <h3 class="text-xl font-bold text-white">エラー</h3>
+        </div>
+        <p id="modal-message" class="text-slate-300 mb-8 text-sm leading-relaxed"></p>
+        <div class="flex justify-end">
+            <button onclick="closeModal()" class="px-5 py-2.5 bg-slate-700 hover:bg-slate-600 rounded-xl font-medium text-white transition-colors w-full sm:w-auto">確認</button>
+        </div>
+    </div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, doc, getDoc, setDoc, updateDoc, onSnapshot, arrayUnion } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    // 1. 環境変数の取得
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'local-dev-app-id';
+    const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+    const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+    // 2. Firebaseの初期化
+    let app, db, auth;
+    try {
+        app = initializeApp(firebaseConfig);
+        db = getFirestore(app);
+        auth = getAuth(app);
+    } catch (e) {
+        console.error("Firebase init error", e);
+        showError("データベースの初期化に失敗しました。");
+    }
+
+    // 3. 状態管理変数
+    let currentUser = null;
+    let peerConnection = null;
+    let dataChannel = null;
+    let roomId = null;
+    let isHost = false;
+    let unsubscribeRoom = null;
+    let processedCandidates = new Set();
+
+    // 転送キューとバッファ
+    const sendQueue = [];
+    let isSending = false;
+    let receiveBuffers = {};
+    const CHUNK_SIZE = 65536; // 64KB
+
+    // WebRTC 設定 (GoogleのパブリックSTUNサーバーを使用)
+    const rtcConfig = {
+        iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' }
+        ]
+    };
+
+    // UI制御関数をグローバルにエクスポート (onclick等で呼ぶため)
+    window.showScreen = (id) => {
+        document.querySelectorAll('.screen').forEach(el => el.classList.remove('active'));
+        document.getElementById(id).classList.add('active');
+    };
+
+    window.showError = (msg) => {
+        document.getElementById('modal-message').innerText = msg;
+        const overlay = document.getElementById('modal-overlay');
+        const content = document.getElementById('modal-content');
+        overlay.classList.remove('hidden');
+        // 少し遅延させてアニメーション
+        setTimeout(() => {
+            overlay.classList.add('opacity-100');
+            content.classList.remove('scale-95');
+            content.classList.add('scale-100');
+        }, 10);
+    };
+
+    window.closeModal = () => {
+        const overlay = document.getElementById('modal-overlay');
+        overlay.classList.add('hidden');
+    };
+
+    window.showToast = (msg) => {
+        const toast = document.getElementById('toast');
+        document.getElementById('toast-message').innerText = msg;
+        toast.classList.remove('translate-y-20', 'opacity-0');
+        setTimeout(() => {
+            toast.classList.add('translate-y-20', 'opacity-0');
+        }, 3000);
+    };
+
+    window.copyRoomId = () => {
+        if (!roomId) return;
+        const el = document.createElement('textarea');
+        el.value = roomId;
+        document.body.appendChild(el);
+        el.select();
+        try {
+            document.execCommand('copy');
+            showToast("ルームIDをコピーしました！");
+        } catch (err) {
+            showError("コピーに失敗しました。");
+        }
+        document.body.removeChild(el);
+    };
+
+    // Firebase パス生成ルールに準拠 (RULE 1)
+    const getRoomRef = (id) => doc(db, 'artifacts', appId, 'public', 'data', 'rooms', id);
+
+    // 4. 認証処理 (RULE 3)
+    async function authenticate() {
+        try {
+            if (initialAuthToken) {
+                await signInWithCustomToken(auth, initialAuthToken);
+            } else {
+                await signInAnonymously(auth);
+            }
+        } catch (error) {
+            console.error("Auth error", error);
+            showError("認証に失敗しました。再読み込みしてください。");
+        }
+    }
+
+    onAuthStateChanged(auth, (user) => {
+        if (user) {
+            currentUser = user;
+            window.showScreen('screen-home');
+        }
+    });
+
+    // 起動時に認証実行
+    if(auth) authenticate();
+
+
+    // ==========================================
+    // WebRTC ロジック
+    // ==========================================
+
+    window.createRoom = async () => {
+        if (!currentUser) return;
+        
+        // 6桁のランダム数字を生成
+        roomId = Math.floor(100000 + Math.random() * 900000).toString();
+        isHost = true;
+        processedCandidates.clear();
+        
+        const roomRef = getRoomRef(roomId);
+
+        // UI表示更新
+        document.getElementById('display-room-id').innerText = roomId;
+        document.getElementById('chat-room-id').innerText = roomId;
+        window.showScreen('screen-waiting');
+
+        try {
+            peerConnection = new RTCPeerConnection(rtcConfig);
+            setupPeerConnectionListeners();
+
+            // ホスト側でDataChannelを作成
+            dataChannel = peerConnection.createDataChannel('fileTransfer', { ordered: true });
+            setupDataChannelListeners();
+
+            // Roomドキュメントの初期化
+            await setDoc(roomRef, {
+                callerCandidates: [],
+                calleeCandidates: [],
+                createdAt: new Date().toISOString()
+            });
+
+            // Offer作成
+            const offer = await peerConnection.createOffer();
+            await peerConnection.setLocalDescription(offer);
+
+            // Firestoreへ保存
+            await updateDoc(roomRef, {
+                offer: { type: offer.type, sdp: offer.sdp }
+            });
+
+            // Firestoreの変更監視 (Answerと相手のICE Candidatesを待つ)
+            unsubscribeRoom = onSnapshot(roomRef, async (snapshot) => {
+                const data = snapshot.data();
+                if (!data) return;
+
+                // Answerが設定されたら取り込む
+                if (!peerConnection.currentRemoteDescription && data.answer) {
+                    const answer = new RTCSessionDescription(data.answer);
+                    await peerConnection.setRemoteDescription(answer);
+                }
+
+                // ゲスト側のICE Candidatesを追加
+                if (data.calleeCandidates) {
+                    for (const candidate of data.calleeCandidates) {
+                        const candStr = JSON.stringify(candidate);
+                        if (!processedCandidates.has(candStr)) {
+                            processedCandidates.add(candStr);
+                            try {
+                                await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+                            } catch (e) {
+                                console.error("Error adding received ice candidate", e);
+                            }
+                        }
+                    }
+                }
+            }, (err) => {
+                console.error("Snapshot error:", err);
+            });
+
+        } catch (error) {
+            console.error("Error creating room:", error);
+            showError("ルームの作成中にエラーが発生しました。");
+            resetApp();
+        }
+    };
+
+    window.attemptJoinRoom = () => {
+        const inputId = document.getElementById('join-room-id').value.trim();
+        if (inputId.length !== 6) {
+            showError("6桁のルームIDを入力してください。");
+            return;
+        }
+        joinRoom(inputId);
+    };
+
+    // Enterキーでも参加可能に
+    document.getElementById('join-room-id').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') window.attemptJoinRoom();
+    });
+
+    async function joinRoom(id) {
+        if (!currentUser) return;
+        roomId = id;
+        isHost = false;
+        processedCandidates.clear();
+        document.getElementById('chat-room-id').innerText = roomId;
+
+        const roomRef = getRoomRef(roomId);
+
+        try {
+            const roomSnap = await getDoc(roomRef);
+            if (!roomSnap.exists()) {
+                showError("ルームが見つかりません。IDを確認してください。");
+                return;
+            }
+
+            peerConnection = new RTCPeerConnection(rtcConfig);
+            setupPeerConnectionListeners();
+
+            // ゲスト側はホストからのDataChannel受信を待つ
+            peerConnection.ondatachannel = (event) => {
+                dataChannel = event.channel;
+                setupDataChannelListeners();
+            };
+
+            // Offerを設定
+            const offer = roomSnap.data().offer;
+            if (!offer) {
+                showError("無効なルーム状態です。");
+                return;
+            }
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+
+            // Answer作成
+            const answer = await peerConnection.createAnswer();
+            await peerConnection.setLocalDescription(answer);
+
+            // FirestoreにAnswer保存
+            await updateDoc(roomRef, {
+                answer: { type: answer.type, sdp: answer.sdp }
+            });
+
+            // ホスト側のICE Candidatesを監視
+            unsubscribeRoom = onSnapshot(roomRef, async (snapshot) => {
+                const data = snapshot.data();
+                if (!data) return;
+
+                if (data.callerCandidates) {
+                    for (const candidate of data.callerCandidates) {
+                        const candStr = JSON.stringify(candidate);
+                        if (!processedCandidates.has(candStr)) {
+                            processedCandidates.add(candStr);
+                            try {
+                                await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+                            } catch (e) {
+                                console.error("Error adding received ice candidate", e);
+                            }
+                        }
+                    }
+                }
+            }, (err) => {
+                console.error("Snapshot error:", err);
+            });
+
+            // 接続中のため一旦待機画面風に
+            showToast("接続を試みています...");
+
+        } catch (error) {
+            console.error("Error joining room:", error);
+            showError("ルームへの参加中にエラーが発生しました。");
+            resetApp();
+        }
+    }
+
+    function setupPeerConnectionListeners() {
+        // ICE Candidate生成時 -> Firestoreに保存
+        peerConnection.onicecandidate = async (event) => {
+            if (event.candidate) {
+                const roomRef = getRoomRef(roomId);
+                const candidateJSON = event.candidate.toJSON();
+                try {
+                    if (isHost) {
+                        await updateDoc(roomRef, { callerCandidates: arrayUnion(candidateJSON) });
+                    } else {
+                        await updateDoc(roomRef, { calleeCandidates: arrayUnion(candidateJSON) });
+                    }
+                } catch (e) {
+                    console.error("Error saving ICE candidate", e);
+                }
+            }
+        };
+
+        // 接続状態の監視
+        peerConnection.onconnectionstatechange = () => {
+            const state = peerConnection.connectionState;
+            console.log("Connection state:", state);
+            
+            if (state === 'connected') {
+                window.showScreen('screen-chat');
+                showToast("P2P接続が確立されました！");
+            } else if (state === 'disconnected' || state === 'failed') {
+                showError("相手との接続が切断されました。");
+                resetApp();
+            }
+        };
+    }
+
+    function setupDataChannelListeners() {
+        dataChannel.onopen = () => {
+            console.log("Data Channel Opened");
+        };
+        
+        dataChannel.onclose = () => {
+            console.log("Data Channel Closed");
+            if (peerConnection && peerConnection.connectionState === 'connected') {
+                showError("データ通信チャネルが閉じられました。");
+                resetApp();
+            }
+        };
+
+        // データ受信処理
+        dataChannel.onmessage = (event) => {
+            if (typeof event.data === 'string') {
+                // メタデータ (JSON)
+                try {
+                    const msg = JSON.parse(event.data);
+                    if (msg.type === 'file-start') {
+                        // 受信バッファの初期化
+                        receiveBuffers[msg.fileId] = {
+                            metadata: msg,
+                            buffers: [],
+                            receivedSize: 0
+                        };
+                        addFileToUI(msg.fileId, msg.fileName, msg.fileSize, msg.fileType, 'receiving');
+                        
+                    } else if (msg.type === 'file-end') {
+                        // 組み立て完了
+                        const fileData = receiveBuffers[msg.fileId];
+                        if (fileData) {
+                            const blob = new Blob(fileData.buffers, { type: fileData.metadata.fileType });
+                            updateProgress(msg.fileId, fileData.metadata.fileSize, fileData.metadata.fileSize, '受信完了');
+                            finishFileTransfer(msg.fileId, blob, fileData.metadata.fileName, fileData.metadata.fileType, false);
+                            delete receiveBuffers[msg.fileId];
+                            showToast(`${fileData.metadata.fileName} を受信しました`);
+                        }
+                    }
+                } catch (e) {
+                    console.error("Failed to parse metadata", e);
+                }
+            } else {
+                // バイナリデータ (チャンク)
+                // 単一順次転送を前提とするため、アクティブなバッファに追記
+                const activeFileIds = Object.keys(receiveBuffers);
+                if (activeFileIds.length > 0) {
+                    const fileId = activeFileIds[0];
+                    const fileData = receiveBuffers[fileId];
+                    fileData.buffers.push(event.data);
+                    fileData.receivedSize += event.data.byteLength;
+                    
+                    // UI更新 (頻度を落とす)
+                    updateProgress(fileId, fileData.receivedSize, fileData.metadata.fileSize, '受信中');
+                }
+            }
+        };
+    }
+
+    // ==========================================
+    // ファイル送信ロジック
+    // ==========================================
+
+    window.enqueueFile = (file) => {
+        sendQueue.push(file);
+        processQueue();
+    };
+
+    async function processQueue() {
+        if (isSending || sendQueue.length === 0) return;
+        isSending = true;
+        
+        const file = sendQueue.shift();
+        try {
+            await sendFile(file);
+        } catch (e) {
+            console.error("File send error", e);
+            showError("ファイルの送信に失敗しました。");
+        }
+        
+        isSending = false;
+        processQueue();
+    }
+
+    async function sendFile(file) {
+        if (!dataChannel || dataChannel.readyState !== 'open') {
+            throw new Error("Data channel is not open");
+        }
+
+        const fileId = crypto.randomUUID();
+        
+        // UIに追加
+        addFileToUI(fileId, file.name, file.size, file.type, 'sending', true);
+        addSenderPreview(fileId, file);
+
+        // メタデータ送信
+        const metadata = {
+            type: 'file-start',
+            fileId: fileId,
+            fileName: file.name,
+            fileSize: file.size,
+            fileType: file.type
+        };
+        dataChannel.send(JSON.stringify(metadata));
+
+        let offset = 0;
+        
+        // ファイルチャンク送信ループ
+        while (offset < file.size) {
+            // バッファ管理: 1MBを超えたら待機
+            while (dataChannel.bufferedAmount > 1048576) {
+                await new Promise(resolve => setTimeout(resolve, 10));
+            }
+            
+            if (dataChannel.readyState !== 'open') throw new Error("Channel closed during transfer");
+
+            const chunk = file.slice(offset, offset + CHUNK_SIZE);
+            const buffer = await chunk.arrayBuffer();
+            
+            dataChannel.send(buffer);
+            offset += buffer.byteLength;
+            
+            updateProgress(fileId, offset, file.size, '送信中');
+        }
+        
+        // 完了シグナル
+        if (dataChannel.readyState === 'open') {
+            dataChannel.send(JSON.stringify({ type: 'file-end', fileId: fileId }));
+            updateProgress(fileId, file.size, file.size, '送信完了');
+            finishFileTransfer(fileId, null, file.name, file.type, true);
+        }
+    }
+
+
+    // ==========================================
+    // UI Helpers
+    // ==========================================
+
+    window.resetApp = () => {
+        if (peerConnection) {
+            peerConnection.close();
+            peerConnection = null;
+        }
+        if (dataChannel) {
+            dataChannel.close();
+            dataChannel = null;
+        }
+        if (unsubscribeRoom) {
+            unsubscribeRoom();
+            unsubscribeRoom = null;
+        }
+        processedCandidates.clear();
+        isHost = false;
+        roomId = null;
+        sendQueue.length = 0;
+        isSending = false;
+        receiveBuffers = {};
+        
+        document.getElementById('file-list').innerHTML = '';
+        document.getElementById('empty-list-msg').classList.remove('hidden');
+        document.getElementById('join-room-id').value = '';
+        
+        window.showScreen('screen-home');
+    };
+
+    function formatBytes(bytes, decimals = 1) {
+        if (!+bytes) return '0 B';
+        const k = 1024;
+        const dm = decimals < 0 ? 0 : decimals;
+        const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+    }
+
+    function addFileToUI(id, name, size, type, status, isSender = false) {
+        const list = document.getElementById('file-list');
+        document.getElementById('empty-list-msg').classList.add('hidden');
+        
+        const item = document.createElement('div');
+        item.id = `file-${id}`;
+        item.className = "flex flex-col p-4 bg-slate-800/80 border border-slate-700/50 rounded-2xl shadow-sm fade-in";
+        
+        // アイコン判定
+        let iconClass = 'ph-file-text';
+        let iconBg = 'bg-slate-700 text-slate-300';
+        if (type.startsWith('image/')) { iconClass = 'ph-image'; iconBg = 'bg-blue-500/20 text-blue-400'; }
+        else if (type.startsWith('video/')) { iconClass = 'ph-video'; iconBg = 'bg-purple-500/20 text-purple-400'; }
+        else if (type.startsWith('audio/')) { iconClass = 'ph-music-notes'; iconBg = 'bg-yellow-500/20 text-yellow-400'; }
+        else if (name.endsWith('.pdf')) { iconClass = 'ph-file-pdf'; iconBg = 'bg-red-500/20 text-red-400'; }
+        else if (type.includes('zip') || name.endsWith('.zip')) { iconClass = 'ph-file-archive'; iconBg = 'bg-orange-500/20 text-orange-400'; }
+                          
+        const statusText = status === 'sending' ? '送信中...' : '受信中...';
+        const statusIcon = isSender ? '<i class="ph ph-arrow-up-right text-blue-400"></i>' : '<i class="ph ph-arrow-down-left text-indigo-400"></i>';
+
+        item.innerHTML = `
+            <div class="flex items-start justify-between">
+                <div class="flex items-center space-x-4 overflow-hidden w-full">
+                    <div class="w-12 h-12 rounded-xl ${iconBg} flex flex-shrink-0 items-center justify-center">
+                        <i class="ph ${iconClass} text-2xl"></i>
+                    </div>
+                    <div class="min-w-0 flex-1">
+                        <p class="text-sm font-bold text-slate-100 truncate" title="${name}">${name}</p>
+                        <div class="flex items-center text-xs text-slate-400 mt-1 space-x-2">
+                            <span>${statusIcon}</span>
+                            <span>${formatBytes(size)}</span>
+                            <span>•</span>
+                            <span id="status-${id}" class="text-blue-400 font-medium">${statusText} (0%)</span>
+                        </div>
+                    </div>
+                    <div id="action-${id}" class="ml-2 flex-shrink-0 flex items-center"></div>
+                </div>
+            </div>
+            <div id="progress-container-${id}" class="w-full bg-slate-900 rounded-full h-2 mt-4 overflow-hidden border border-slate-700/50">
+                <div id="progress-bar-${id}" class="bg-gradient-to-r from-blue-500 to-indigo-500 h-full rounded-full transition-all duration-300 relative" style="width: 0%">
+                    <div class="absolute inset-0 bg-white/20 w-full h-full animate-[pulse_1s_ease-in-out_infinite]"></div>
+                </div>
+            </div>
+            <div id="preview-${id}" class="mt-4 hidden relative group"></div>
+        `;
+        
+        list.prepend(item);
+    }
+
+    function updateProgress(id, current, total, statusText) {
+        const bar = document.getElementById(`progress-bar-${id}`);
+        const statusEl = document.getElementById(`status-${id}`);
+        const percent = Math.min(100, Math.round((current / total) * 100));
+        
+        if (bar) bar.style.width = `${percent}%`;
+        if (statusEl) statusEl.innerText = `${statusText} (${percent}%)`;
+    }
+
+    function finishFileTransfer(id, blob, fileName, fileType, isSender) {
+        const container = document.getElementById(`progress-container-${id}`);
+        const statusEl = document.getElementById(`status-${id}`);
+        const actionContainer = document.getElementById(`action-${id}`);
+        const previewContainer = document.getElementById(`preview-${id}`);
+        
+        if (container) {
+            container.style.opacity = '0';
+            setTimeout(() => container.classList.add('hidden'), 300);
+        }
+        
+        if (statusEl) {
+            statusEl.innerText = isSender ? '送信完了' : '受信完了';
+            statusEl.className = 'text-green-400 font-bold flex items-center space-x-1';
+            statusEl.innerHTML = `<i class="ph-fill ph-check-circle"></i> <span>${statusEl.innerText}</span>`;
+        }
+        
+        if (!isSender && blob) {
+            const url = URL.createObjectURL(blob);
+            
+            // ダウンロードボタン
+            actionContainer.innerHTML = `
+                <a href="${url}" download="${fileName}" class="flex items-center space-x-1 px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors text-sm font-medium shadow-lg shadow-blue-900/20 active:scale-95" title="オリジナル画質で保存">
+                    <i class="ph ph-download-simple text-lg"></i>
+                    <span>保存</span>
+                </a>
+            `;
+            
+            // プレビュー表示
+            if (fileType.startsWith('image/')) {
+                previewContainer.classList.remove('hidden');
+                previewContainer.innerHTML = `
+                    <div class="relative rounded-xl overflow-hidden border border-slate-700 bg-slate-900 flex justify-center">
+                        <img src="${url}" class="max-h-64 object-contain">
+                        <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                            <span class="text-white text-xs font-bold px-2 py-1 bg-black/60 rounded">無圧縮オリジナル画質</span>
+                        </div>
+                    </div>
+                `;
+            } else if (fileType.startsWith('video/')) {
+                previewContainer.classList.remove('hidden');
+                previewContainer.innerHTML = `
+                    <video src="${url}" controls class="max-h-64 rounded-xl border border-slate-700 w-full bg-black"></video>
+                `;
+            }
+        }
+    }
+
+    function addSenderPreview(id, file) {
+        if (file.type.startsWith('image/')) {
+            const previewContainer = document.getElementById(`preview-${id}`);
+            if(previewContainer) {
+                previewContainer.classList.remove('hidden');
+                const url = URL.createObjectURL(file);
+                previewContainer.innerHTML = `
+                    <div class="relative rounded-xl overflow-hidden border border-slate-700 bg-slate-900 flex justify-center opacity-70">
+                        <img src="${url}" class="max-h-48 object-contain filter grayscale-[30%]">
+                    </div>
+                `;
+            }
+        }
+    }
+
+    // ドラッグ＆ドロップイベント設定
+    const dropZone = document.getElementById('drop-zone');
+    const fileInput = document.getElementById('file-input');
+
+    dropZone.addEventListener('click', () => fileInput.click());
+
+    fileInput.addEventListener('change', (e) => {
+        const files = e.target.files;
+        for (let i = 0; i < files.length; i++) {
+            window.enqueueFile(files[i]);
+        }
+        fileInput.value = ''; // Reset
+    });
+
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, preventDefaults, false);
+    });
+
+    function preventDefaults (e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+
+    ['dragenter', 'dragover'].forEach(eventName => {
+        dropZone.addEventListener(eventName, () => {
+            dropZone.classList.add('border-blue-500', 'bg-slate-800');
+        }, false);
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, () => {
+            dropZone.classList.remove('border-blue-500', 'bg-slate-800');
+        }, false);
+    });
+
+    dropZone.addEventListener('drop', (e) => {
+        const dt = e.dataTransfer;
+        const files = dt.files;
+        for (let i = 0; i < files.length; i++) {
+            window.enqueueFile(files[i]);
+        }
+    }, false);
+
+</script>
+</body>
+</html>
